@@ -73,7 +73,7 @@
     position: relative;
     z-index: 1;
     width: min(420px, 88vw);
-    aspect-ratio: 907 / 1024;
+    aspect-ratio: 864 / 1024;
     margin: 4px auto 40px;
   }
   .sign-wrap img {
@@ -98,12 +98,16 @@
     outline: none;
   }
 
-  /* Travel map arrow (top) */
-  .hs-map    { left: 5%;  top: 13%; width: 80%; height: 17%; }
-  /* Color Sudoku arrow (middle) */
-  .hs-sudoku { left: 5%;  top: 34%; width: 83%; height: 16%; }
-  /* Don't click here sign (bottom) */
-  .hs-danger { left: 32%; top: 53%; width: 30%; height: 19%; }
+  /* Travel map arrow */
+  .hs-map    { left: 21.7%; top: 8.8%;  width: 56.9%; height: 16.9%; }
+  /* Color Sudoku arrow */
+  .hs-sudoku { left: 16.4%; top: 29.5%; width: 54.0%; height: 14.2%; }
+  /* Wordle arrow */
+  .hs-wordle { left: 26.4%; top: 46.0%; width: 47.5%; height: 15.3%; }
+  /* Don't click here sign */
+  .hs-danger { left: 63.3%; top: 64.0%; width: 18.7%; height: 18.2%; }
+  /* Tower arrow */
+  .hs-tower  { left: 13.8%; top: 83.5%; width: 38.7%; height: 12.2%; }
 
   /* Modal */
   .modal-overlay {
@@ -172,13 +176,19 @@
 <p class="subtitle">Hop around and pick a sign ✨</p>
 
 <div class="sign-wrap">
-  <img src="img/roadsign_final.png" alt="Signpost with Laura's projects">
+  <img src="img/roadsign_final_v2.png" alt="Signpost with Laura's projects">
 
   <a class="hotspot hs-map" href="https://laura.proost.science/country-map/"
      aria-label="Travel map"></a>
 
   <a class="hotspot hs-sudoku" href="https://laura.proost.science/color-sudoku/"
      aria-label="Color Sudoku"></a>
+
+  <a class="hotspot hs-wordle" href="https://laura.proost.science/wordle/"
+     aria-label="Wordle"></a>
+
+  <a class="hotspot hs-tower" href="https://laura.proost.science/tower/"
+     aria-label="Tower"></a>
 
   <button class="hotspot hs-danger" id="dangerBtn" aria-label="Don't click here"></button>
 </div>

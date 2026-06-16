@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hotspot Editor</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; margin: 0; background: #2b2b3a; color: #eee; }
+  .layout { display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; }
+  .stage-col { flex: 1 1 480px; }
+  .side-col  { flex: 1 1 320px; }
+
+  h1 { font-size: 1.2rem; margin: 0 0 4px; }
+  p.hint { font-size: 0.85rem; color: #bbb; margin: 0 0 12px; }
+
+  /* Stage keeps the image's aspect ratio so % maps cleanly */
+  #stage {
+    position: relative;
+    width: 100%;
+    max-width: 520px;
+    aspect-ratio: 864 / 1024;
+    margin: 0 auto;
+    user-select: none;
+    touch-action: none;
+  }
+  #stage img { width: 100%; height: 100%; display: block; }
+
+  .region {
+    position: absolute;
+    border: 2px solid;
+    background: rgba(255,255,255,0.12);
+    cursor: move;
+  }
+  .region .tag {
+    position: absolute;
+    top: -20px; left: -2px;
+    font-size: 11px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    white-space: nowrap;
+    color: #fff;
+  }
+  .handle {
+    position: absolute;
+    width: 14px; height: 14px;
+    background: #fff;
+    border: 2px solid #333;
+    border-radius: 50%;
+  }
+  .handle.nw { left: -7px;  top: -7px;    cursor: nwse-resize; }
+  .handle.ne { right: -7px; top: -7px;    cursor: nesw-resize; }
+  .handle.sw { left: -7px;  bottom: -7px; cursor: nesw-resize; }
+  .handle.se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+
+  textarea {
+    width: 100%; height: 230px;
+    background: #1c1c28; color: #9fe; border: 1px solid #555;
+    border-radius: 8px; padding: 10px; font-family: monospace; font-size: 13px;
+  }
+  button {
+    background: #f87fcb; color: #fff; border: none; border-radius: 8px;
+    padding: 8px 14px; font-size: 0.9rem; cursor: pointer; margin: 8px 6px 0 0;
+  }
+  button:hover { background: #d63ba3; }
+  .legend { font-size: 0.82rem; line-height: 1.6; margin-top: 10px; }
+  .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <div class="stage-col">
+    <h1>Roadsign hotspot editor</h1>
+    <p class="hint">Drag a box to move it. Drag the white corner dots to resize. The text on the right updates live, copy it back to Claude.</p>
+    <div id="stage">
+      <img src="img/roadsign_final_v2.png" alt="roadsign">
+    </div>
+  </div>
+
+  <div class="side-col">
+    <h1>Coordinates</h1>
+    <p class="hint">Format: name = left% top% width% height%</p>
+    <textarea id="output" readonly></textarea>
+    <div>
+      <button id="copyBtn">Copy to clipboard</button>
+      <button id="resetBtn">Reset</button>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+</div>
+
+<script>
+  // Initial estimated regions (percentages of the image box)
+  const defaults = [
+    { id: 'map',    label: 'Travel map',     color: '#2da8ff', left: 21.7, top: 8.8,  width: 56.9, height: 16.9 },
+    { id: 'sudoku', label: 'Color Sudoku',   color: '#35d07a', left: 16.4, top: 29.5, width: 54.0, height: 14.2 },
+    { id: 'wordle', label: 'Wordle',         color: '#ffd400', left: 26.4, top: 46.0, width: 47.5, height: 15.3 },
+    { id: 'danger', label: "Don't click",    color: '#ff4d4d', left: 63.3, top: 64.0, width: 18.7, height: 18.2 },
+    { id: 'tower',  label: 'Tower',          color: '#c07bff', left: 13.8, top: 83.5, width: 38.7, height: 12.2 },
+  ];
+
+  let regions = JSON.parse(JSON.stringify(defaults));
+  const stage = document.getElementById('stage');
+  const output = document.getElementById('output');
+
+  function clamp(v) { return Math.max(0, Math.min(100, v)); }
+
+  function render() {
+    // Remove old region nodes (keep the image)
+    stage.querySelectorAll('.region').forEach(n => n.remove());
+    regions.forEach((r, i) => {
+      const el = document.createElement('div');
+      el.className = 'region';
+      el.style.left = r.left + '%';
+      el.style.top = r.top + '%';
+      el.style.width = r.width + '%';
+      el.style.height = r.height + '%';
+      el.style.borderColor = r.color;
+      el.dataset.idx = i;
+      el.innerHTML =
+        '<span class="tag" style="background:' + r.color + '">' + r.label + '</span>' +
+        '<span class="handle nw"></span><span class="handle ne"></span>' +
+        '<span class="handle sw"></span><span class="handle se"></span>';
+      stage.appendChild(el);
+    });
+    updateOutput();
+  }
+
+  function updateOutput() {
+    output.value = regions.map(r =>
+      r.id + ' = ' + r.left.toFixed(1) + '% ' + r.top.toFixed(1) + '% ' +
+      r.width.toFixed(1) + '% ' + r.height.toFixed(1) + '%'
+    ).join('\n');
+  }
+
+  // Pointer-based drag / resize
+  let drag = null;
+  stage.addEventListener('pointerdown', e => {
+    const handle = e.target.closest('.handle');
+    const regionEl = e.target.closest('.region');
+    if (!regionEl) return;
+    const idx = +regionEl.dataset.idx;
+    const rect = stage.getBoundingClientRect();
+    drag = {
+      idx, rect,
+      mode: handle ? [...handle.classList].find(c => ['nw','ne','sw','se'].includes(c)) : 'move',
+      startX: e.clientX, startY: e.clientY,
+      orig: { ...regions[idx] },
+    };
+    e.target.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  stage.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dxPct = (e.clientX - drag.startX) / drag.rect.width * 100;
+    const dyPct = (e.clientY - drag.startY) / drag.rect.height * 100;
+    const r = regions[drag.idx];
+    const o = drag.orig;
+    if (drag.mode === 'move') {
+      r.left = clamp(o.left + dxPct);
+      r.top = clamp(o.top + dyPct);
+    } else {
+      // Resize from the grabbed corner
+      let l = o.left, t = o.top, w = o.width, h = o.height;
+      if (drag.mode.includes('w')) { l = o.left + dxPct; w = o.width - dxPct; }
+      if (drag.mode.includes('e')) { w = o.width + dxPct; }
+      if (drag.mode.includes('n')) { t = o.top + dyPct; h = o.height - dyPct; }
+      if (drag.mode.includes('s')) { h = o.height + dyPct; }
+      if (w > 2) { r.left = l; r.width = w; }
+      if (h > 2) { r.top = t; r.height = h; }
+    }
+    // Live update positions without full re-render
+    const el = stage.querySelector('.region[data-idx="' + drag.idx + '"]');
+    el.style.left = r.left + '%'; el.style.top = r.top + '%';
+    el.style.width = r.width + '%'; el.style.height = r.height + '%';
+    updateOutput();
+  });
+
+  stage.addEventListener('pointerup', () => { drag = null; });
+
+  document.getElementById('copyBtn').addEventListener('click', () => {
+    output.select();
+    navigator.clipboard.writeText(output.value);
+  });
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    regions = JSON.parse(JSON.stringify(defaults));
+    render();
+  });
+
+  // Build a small color legend
+  document.getElementById('legend').innerHTML = defaults.map(r =>
+    '<div><span class="swatch" style="background:' + r.color + '"></span>' + r.label + '</div>'
+  ).join('');
+
+  render();
+</script>
+</body>
+</html>
